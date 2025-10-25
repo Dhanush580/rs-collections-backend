@@ -24,7 +24,7 @@ function createTransport() {
 	});
 }
 
-// Unified email sending function - uses SendGrid (primary) or SMTP (fallback)
+// Unified email sending function - SendGrid only (production-ready)
 async function sendEmail({ to, subject, html, text }) {
 	// SendGrid (primary method)
 	if (process.env.SENDGRID_API_KEY) {
@@ -48,13 +48,18 @@ async function sendEmail({ to, subject, html, text }) {
 			console.log('Email sent successfully via SendGrid.');
 			return;
 		} catch (err) {
-			console.log('SendGrid failed...');
-			console.warn('SendGrid email failed:', err?.message || err);
+			console.error('SendGrid email failed:', err?.message || err);
+			console.error('SendGrid error details:', err?.response?.body || 'No response body');
+
+			// In production, don't fallback to SMTP as it may not work on cloud platforms
+			if (process.env.NODE_ENV === 'production') {
+				throw new Error(`SendGrid email failed: ${err?.message || 'Unknown error'}`);
+			}
 		}
 	}
 
-	// SMTP fallback (Gmail or custom)
-	if (process.env.SMTP_HOST || process.env.GMAIL_USER) {
+	// Development fallback: SMTP (only for local development)
+	if (process.env.NODE_ENV !== 'production' && (process.env.SMTP_HOST || process.env.GMAIL_USER)) {
 		try {
 			console.log('Sending email via SMTP (fallback)...');
 			const transporter = createTransport();
@@ -74,8 +79,12 @@ async function sendEmail({ to, subject, html, text }) {
 		}
 	}
 
-	// Last resort: Log for development
-	console.log(`[EMAIL_DEMO] To: ${to}, Subject: ${subject}`);
+	// Last resort: Log for development or throw error in production
+	if (process.env.NODE_ENV === 'production') {
+		throw new Error('All email providers failed - check SendGrid configuration');
+	} else {
+		console.log(`[EMAIL_DEMO] To: ${to}, Subject: ${subject}`);
+	}
 }
 
 // GET /orders (admin)

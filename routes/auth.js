@@ -74,9 +74,9 @@ function buildSmtpFromHeader() {
 	return 'RS Collections <no-reply@example.com>';
 }
 
-// Unified email sending function - uses SendGrid (primary) or SMTP (fallback)
+// Unified email sending function - SendGrid only (production-ready)
 async function sendEmail({ to, subject, html, text }) {
-	// SendGrid (primary method)
+	// SendGrid (primary and only method for production)
 	if (process.env.SENDGRID_API_KEY) {
 		try {
 			console.log('Sending email via SendGrid...');
@@ -94,22 +94,27 @@ async function sendEmail({ to, subject, html, text }) {
 				text: text
 			};
 
-			await sgMail.send(msg);
+			const result = await sgMail.send(msg);
 			console.log('Email sent successfully via SendGrid.');
-			return;
+			return result;
 		} catch (err) {
-			console.log('SendGrid failed...');
-			console.warn('SendGrid email failed:', err?.message || err);
+			console.error('SendGrid email failed:', err?.message || err);
+			console.error('SendGrid error details:', err?.response?.body || 'No response body');
+
+			// In production, don't fallback to SMTP as it may not work on cloud platforms
+			if (process.env.NODE_ENV === 'production') {
+				throw new Error(`SendGrid email failed: ${err?.message || 'Unknown error'}`);
+			}
 		}
 	}
 
-	// SMTP fallback (Gmail or custom)
-	if (process.env.SMTP_HOST || process.env.GMAIL_USER) {
+	// Development fallback: SMTP (only for local development)
+	if (process.env.NODE_ENV !== 'production' && (process.env.SMTP_HOST || process.env.GMAIL_USER)) {
 		try {
-			console.log('Sending email via SMTP (fallback)...');
+			console.log('Sending email via SMTP (development fallback)...');
 			const transporter = createTransport();
 			const fromHeader = process.env.SMTP_HOST ? buildSmtpFromHeader() : `RS Collections <${process.env.GMAIL_USER}>`;
-			await transporter.sendMail({
+			const result = await transporter.sendMail({
 				from: fromHeader,
 				to,
 				subject,
@@ -117,21 +122,20 @@ async function sendEmail({ to, subject, html, text }) {
 				html
 			});
 			console.log('Email sent successfully via SMTP.');
-			return;
+			return result;
 		} catch (err) {
 			console.log('SMTP failed...');
 			console.warn('SMTP email failed:', err?.message || err);
 		}
 	}
 
-	// Last resort: Demo mode (for development)
-	if (process.env.OTP_DEMO === 'true') {
+	// Last resort: Log for development or throw error in production
+	if (process.env.NODE_ENV === 'production') {
+		throw new Error('All email providers failed - check SendGrid configuration');
+	} else {
 		console.log(`[EMAIL_DEMO] To: ${to}, Subject: ${subject}`);
 		console.log(`[EMAIL_DEMO] Text: ${text}`);
-		return;
 	}
-
-	throw new Error('All email providers failed');
 }
 
 async function sendOtpEmail(to, code) {
