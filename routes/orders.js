@@ -203,7 +203,7 @@ router.post(
 									.join('');
 
 								const orderDate = new Date(orderDoc.createdAt || Date.now()).toLocaleString('en-IN');
-								const paymentText = payment && payment.method === 'card' ? 'Card (Paid)' : 'Cash on Delivery';
+								const paymentText = 'Card (Paid)';
 
 								const html = `
 <!doctype html>
