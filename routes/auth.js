@@ -74,12 +74,39 @@ function buildSmtpFromHeader() {
 	return 'RS Collections <no-reply@example.com>';
 }
 
-// Unified email sending function - uses SMTP
+// Unified email sending function - uses SendGrid (primary) or SMTP (fallback)
 async function sendEmail({ to, subject, html, text }) {
-	// SMTP (Gmail or custom)
+	// SendGrid (primary method)
+	if (process.env.SENDGRID_API_KEY) {
+		try {
+			console.log('Sending email via SendGrid...');
+			const sgMail = require('@sendgrid/mail');
+			sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+			const msg = {
+				to: to,
+				from: {
+					email: process.env.MAIL_FROM || process.env.GMAIL_USER || 'noreply@rscollections.com',
+					name: 'RS Collections'
+				},
+				subject: subject,
+				html: html,
+				text: text
+			};
+
+			await sgMail.send(msg);
+			console.log('Email sent successfully via SendGrid.');
+			return;
+		} catch (err) {
+			console.log('SendGrid failed...');
+			console.warn('SendGrid email failed:', err?.message || err);
+		}
+	}
+
+	// SMTP fallback (Gmail or custom)
 	if (process.env.SMTP_HOST || process.env.GMAIL_USER) {
 		try {
-			console.log('Sending email via SMTP...');
+			console.log('Sending email via SMTP (fallback)...');
 			const transporter = createTransport();
 			const fromHeader = process.env.SMTP_HOST ? buildSmtpFromHeader() : `RS Collections <${process.env.GMAIL_USER}>`;
 			await transporter.sendMail({
